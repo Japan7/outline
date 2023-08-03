@@ -1,6 +1,9 @@
 import Router from "koa-router";
 import { Op, WhereOptions } from "sequelize";
 import { MAX_AVATAR_DISPLAY } from "@shared/constants";
+import groupCreator from "@server/commands/groupCreator";
+import groupUserCreator from "@server/commands/groupUserCreator";
+import groupUserDestroyer from "@server/commands/groupUserDestroyer";
 import auth from "@server/middlewares/authentication";
 import { rateLimiter } from "@server/middlewares/rateLimiter";
 import validate from "@server/middlewares/validate";
@@ -96,22 +99,8 @@ router.post(
     const { name } = ctx.input.body;
     const { user } = ctx.state.auth;
     authorize(user, "createGroup", user.team);
-    const g = await Group.create({
-      name,
-      teamId: user.teamId,
-      createdById: user.id,
-    });
 
-    // reload to get default scope
-    const group = await Group.findByPk(g.id, { rejectOnEmpty: true });
-
-    await Event.createFromContext(ctx, {
-      name: "groups.create",
-      modelId: group.id,
-      data: {
-        name: group.name,
-      },
-    });
+    const group = await groupCreator({ name, user, ip: ctx.request.ip });
 
     ctx.body = {
       data: presentGroup(group),
@@ -241,40 +230,14 @@ router.post(
     let group = await Group.findByPk(id);
     authorize(actor, "update", group);
 
-    let membership = await GroupUser.findOne({
-      where: {
-        groupId: id,
-        userId,
-      },
+    const resp = await groupUserCreator({
+      user,
+      group,
+      actor,
+      ip: ctx.request.ip,
     });
-
-    if (!membership) {
-      await group.$add("user", user, {
-        through: {
-          createdById: actor.id,
-        },
-      });
-      // reload to get default scope
-      membership = await GroupUser.findOne({
-        where: {
-          groupId: id,
-          userId,
-        },
-        rejectOnEmpty: true,
-      });
-
-      // reload to get default scope
-      group = await Group.findByPk(id, { rejectOnEmpty: true });
-
-      await Event.createFromContext(ctx, {
-        name: "groups.add_user",
-        userId,
-        modelId: group.id,
-        data: {
-          name: user.name,
-        },
-      });
-    }
+    group = resp.group;
+    const membership = resp.membership;
 
     ctx.body = {
       data: {
@@ -302,18 +265,12 @@ router.post(
     const user = await User.findByPk(userId);
     authorize(actor, "read", user);
 
-    await group.$remove("user", user);
-    await Event.createFromContext(ctx, {
-      name: "groups.remove_user",
-      userId,
-      modelId: group.id,
-      data: {
-        name: user.name,
-      },
+    group = await groupUserDestroyer({
+      user,
+      group,
+      actor,
+      ip: ctx.request.ip,
     });
-
-    // reload to get default scope
-    group = await Group.findByPk(id, { rejectOnEmpty: true });
 
     ctx.body = {
       data: {

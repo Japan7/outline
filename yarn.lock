@@ -3710,12 +3710,12 @@ acorn-jsx@^5.3.2:
   resolved "https://registry.yarnpkg.com/acorn-jsx/-/acorn-jsx-5.3.2.tgz#7ed5bb55908b3b2f1bc55c6af1653bada7f07937"
   integrity sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==
 
-acorn-walk@^8.0.2, acorn-walk@^8.2.0:
+acorn-walk@^8.0.2:
   version "8.2.0"
   resolved "https://registry.yarnpkg.com/acorn-walk/-/acorn-walk-8.2.0.tgz#741210f2e2426454508853a2f44d0ab83b7f69c1"
   integrity sha512-k+iyHEuPgSw6SbuDpGQM+06HQUa04DZ3o+F6CSzXMvvI5KMvnaEqXe+YVe555R9nn6GPt404fos4wcgpw12SDA==
 
-acorn@^8.1.0, acorn@^8.7.0, acorn@^8.8.1, acorn@^8.8.2, acorn@^8.9.0:
+acorn@^8.1.0, acorn@^8.8.1, acorn@^8.8.2, acorn@^8.9.0:
   version "8.10.0"
   resolved "https://registry.yarnpkg.com/acorn/-/acorn-8.10.0.tgz#8be5b3907a67221a81ab23c7889c4c5526b62ec5"
   integrity sha512-F0SAmZ8iUtS//m8DmCTA0jlh6TDKkHQyK6xc6V4KDTyZKA9dnvX9/3sRTVQrWm79glUAZbnmmNcdYwUIHWVybw==
@@ -13029,24 +13029,16 @@ vite-plugin-static-copy@^0.17.0:
     fs-extra "^11.1.0"
     picocolors "^1.0.0"
 
-vite@^5.0.5:
-  version "5.0.5"
-  resolved "https://registry.yarnpkg.com/vite/-/vite-5.0.5.tgz#3eebe3698e3b32cea36350f58879258fec858a3c"
-  integrity sha512-OekeWqR9Ls56f3zd4CaxzbbS11gqYkEiBtnWFFgYR2WV8oPJRRKq0mpskYy/XaoCL3L7VINDhqqOMNDiYdGvGg==
+vite@^5.0.12:
+  version "5.0.12"
+  resolved "https://registry.yarnpkg.com/vite/-/vite-5.0.12.tgz#8a2ffd4da36c132aec4adafe05d7adde38333c47"
+  integrity sha512-4hsnEkG3q0N4Tzf1+t6NdN9dg/L3BM+q8SWgbSPnJvrgH2kgdyzfVJwbR1ic69/4uMJJ/3dqDZZE5/WwqW8U1w==
   dependencies:
     esbuild "^0.19.3"
     postcss "^8.4.32"
     rollup "^4.2.0"
   optionalDependencies:
     fsevents "~2.3.3"
-
-vm2@3.9.19:
-  version "3.9.19"
-  resolved "https://registry.yarnpkg.com/vm2/-/vm2-3.9.19.tgz#be1e1d7a106122c6c492b4d51c2e8b93d3ed6a4a"
-  integrity sha512-J637XF0DHDMV57R6JyVsTak7nIL8gy5KH4r1HiwWLf/4GBbb5MKL5y7LpmF4A8E2nR6XmzpmMFQ7V7ppPTmUQg==
-  dependencies:
-    acorn "^8.7.0"
-    acorn-walk "^8.2.0"
 
 void-elements@3.1.0:
   version "3.1.0"

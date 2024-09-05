@@ -1,6 +1,7 @@
 import path from "path";
 import { readFile } from "fs-extra";
 import invariant from "invariant";
+import { Op } from "sequelize";
 import { CollectionPermission, UserRole } from "@shared/types";
 import WelcomeEmail from "@server/emails/templates/WelcomeEmail";
 import env from "@server/env";
@@ -13,11 +14,15 @@ import {
   AuthenticationProvider,
   Collection,
   Document,
+  Group,
+  GroupUser,
   Team,
   User,
 } from "@server/models";
 import { DocumentHelper } from "@server/models/helpers/DocumentHelper";
 import { sequelize } from "@server/storage/database";
+import groupCreator from "./groupCreator";
+import groupUserCreator from "./groupUserCreator";
 import teamProvisioner from "./teamProvisioner";
 import userProvisioner from "./userProvisioner";
 
@@ -51,6 +56,8 @@ type Props = {
     /** The public url of an image representing the team */
     avatarUrl?: string | null;
   };
+  /** Groups the user should be member of */
+  groups?: string[];
   /** Details of the authentication provider being used */
   authenticationProvider: {
     /** The name of the authentication provider, eg "google" */
@@ -84,6 +91,7 @@ async function accountProvisioner({
   ip,
   user: userParams,
   team: teamParams,
+  groups: groupNames,
   authenticationProvider: authenticationProviderParams,
   authentication: authenticationParams,
 }: Props): Promise<AccountProvisionerResult> {
@@ -189,6 +197,10 @@ async function accountProvisioner({
     }
   }
 
+  if (groupNames !== undefined) {
+    await reconciliateUserGroups(groupNames, user, team, ip);
+  }
+
   return {
     user,
     team,
@@ -255,3 +267,40 @@ async function provisionFirstCollection(team: Team, user: User) {
 export default traceFunction({
   spanName: "accountProvisioner",
 })(accountProvisioner);
+
+async function reconciliateUserGroups(
+  groupNames: string[],
+  user: User,
+  team: Team,
+  ip: string
+) {
+  const groups = await Promise.all(
+    groupNames.map(async (groupName) => {
+      // Get existing group
+      let group = await Group.findOne({
+        where: {
+          name: { [Op.iLike]: groupName },
+          teamId: team.id,
+        },
+      });
+      // Create group if it doesn't exist
+      group ??= await groupCreator({
+        name: groupName,
+        actor: user,
+        ip,
+      });
+      // Add user to group
+      await groupUserCreator({ user, group, actor: user, ip });
+      return group;
+    })
+  );
+  // Remove user from groups they are no longer a member of
+  await GroupUser.destroy({
+    where: {
+      userId: user.id,
+      groupId: {
+        [Op.notIn]: groups.map((group) => group.id),
+      },
+    },
+  });
+}

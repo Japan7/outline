@@ -81,15 +81,15 @@ async function teamProvisioner({
       throw InvalidAuthenticationError();
     }
 
-    // This team + auth provider combination has not been seen before in self hosted
-    const team = await Team.findByPk(teamId, {
-      rejectOnEmpty: true,
-    });
+    // This team has never been seen before, if self hosted the logic is different
+    // to the multi-tenant version, we want to restrict to a single team that MAY
+    // have multiple authentication providers
+    const team = await Team.findOne();
 
     // If the self-hosted installation has a single team and the domain for the
     // new team is allowed then assign the authentication provider to the
     // existing team
-    if (domain) {
+    if (team && domain) {
       if (await team.isDomainAllowed(domain)) {
         authP = await team.$create<AuthenticationProvider>(
           "authenticationProvider",
@@ -100,10 +100,14 @@ async function teamProvisioner({
           team,
           isNewTeam: false,
         };
+      } else {
+        throw DomainNotAllowedError();
       }
-      throw DomainNotAllowedError();
     }
-    throw InvalidAuthenticationError();
+
+    if (team) {
+      throw InvalidAuthenticationError();
+    }
   }
 
   // We cannot find an existing team, so we create a new one

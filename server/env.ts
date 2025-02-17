@@ -494,6 +494,14 @@ export class Environment {
   public DD_SERVICE = environment.DD_SERVICE ?? "outline";
 
   /**
+   * The OIDC profile field that lists group memberships.
+   */
+  @IsOptional()
+  public OIDC_GROUPS_CLAIM = this.toOptionalString(
+    process.env.OIDC_GROUPS_CLAIM
+  );
+
+  /**
    * A string representing the version of the software.
    *
    * SOURCE_COMMIT is used by Docker Hub

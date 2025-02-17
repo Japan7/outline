@@ -180,6 +180,10 @@ export function createOIDCRouter(
             avatarUrl = null;
           }
 
+          const groups = env.OIDC_GROUPS_CLAIM
+            ? (get(profile, env.OIDC_GROUPS_CLAIM, []) as string[])
+            : undefined;
+
           const result = await accountProvisioner({
             ip: ctx.ip,
             team: {
@@ -193,6 +197,7 @@ export function createOIDCRouter(
               email,
               avatarUrl,
             },
+            groups,
             authenticationProvider: {
               name: config.id,
               providerId,

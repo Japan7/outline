@@ -232,6 +232,9 @@ export function createOIDCRouter(
               user,
               authType: context.state?.auth?.type,
             });
+            const groups = env.OIDC_GROUPS_CLAIM
+              ? (get(profile, env.OIDC_GROUPS_CLAIM, []) as string[])
+              : undefined;
             const result = await accountProvisioner(ctx, {
               team: {
                 teamId: team?.id,
@@ -246,6 +249,7 @@ export function createOIDCRouter(
                 avatarUrl,
                 language,
               },
+              groups,
               authenticationProvider: {
                 name: config.id,
                 providerId,

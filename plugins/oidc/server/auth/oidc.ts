@@ -128,6 +128,10 @@ if (
             );
           }
 
+          const groups = env.OIDC_GROUPS_CLAIM
+            ? (get(profile, env.OIDC_GROUPS_CLAIM, []) as string[])
+            : undefined;
+
           const result = await accountProvisioner({
             ip: ctx.ip,
             team: {
@@ -141,6 +145,7 @@ if (
               email: profile.email,
               avatarUrl: profile.picture,
             },
+            groups,
             authenticationProvider: {
               name: config.id,
               providerId,

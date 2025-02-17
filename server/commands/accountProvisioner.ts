@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readFile } from "fs-extra";
 import invariant from "invariant";
+import { Op } from "sequelize";
 import { CollectionPermission, UserRole } from "@shared/types";
 import env from "@server/env";
 import {
@@ -15,6 +16,8 @@ import {
   Collection,
   Document,
   Event,
+  Group,
+  GroupUser,
   Team,
 } from "@server/models";
 import { DocumentHelper } from "@server/models/helpers/DocumentHelper";
@@ -55,6 +58,8 @@ type Props = {
     /** The public url of an image representing the team */
     avatarUrl?: string | null;
   };
+  /** Groups the user should be member of */
+  groups?: string[];
   /** Details of the authentication provider being used */
   authenticationProvider: {
     /** The name of the authentication provider, eg "google" */
@@ -89,6 +94,7 @@ async function accountProvisioner(
   {
     user: userParams,
     team: teamParams,
+    groups: groupNames,
     authenticationProvider: authenticationProviderParams,
     authentication: authenticationParams,
   }: Props
@@ -221,45 +227,8 @@ async function accountProvisioner(
     }
   }
 
-  // Sync group memberships from the authentication provider if enabled
-  if (authenticationParams.accessToken) {
-    const settings = authenticationProvider.settings;
-
-    if (settings?.groupSyncEnabled) {
-      const syncProvider = PluginManager.getGroupSyncProvider(
-        authenticationProviderParams.name
-      );
-
-      if (syncProvider) {
-        try {
-          const externalGroups = await syncProvider.fetchUserGroups(
-            authenticationParams.accessToken,
-            settings
-          );
-
-          await sequelize.transaction(async (transaction) => {
-            const groupSyncCtx = createContext({
-              user,
-              ip: ctx.context?.ip,
-              transaction,
-            });
-
-            await groupsSyncer(groupSyncCtx, {
-              user,
-              team,
-              authenticationProvider,
-              externalGroups,
-            });
-          });
-        } catch (err) {
-          // Group sync failure should never block login
-          Logger.error("Group sync failed during login", err, {
-            userId: user.id,
-            provider: authenticationProviderParams.name,
-          });
-        }
-      }
-    }
+  if (groupNames !== undefined) {
+    await reconciliateUserGroups(groupNames, user, team);
   }
 
   return {
@@ -330,3 +299,47 @@ async function provisionFirstCollection(
 export default traceFunction({
   spanName: "accountProvisioner",
 })(accountProvisioner);
+
+async function reconciliateUserGroups(
+  groupNames: string[],
+  user: User,
+  team: Team
+) {
+  const groups = await Promise.all(
+    groupNames.map(async (groupName) => {
+      // Get existing group
+      let group = await Group.findOne({
+        where: {
+          name: { [Op.iLike]: groupName },
+          teamId: team.id,
+        },
+      });
+      // Create group if it doesn't exist
+      group ??= await Group.create({
+        name: groupName,
+        teamId: user.teamId,
+        createdById: user.id,
+      });
+      // Add user to group
+      await GroupUser.findOrCreate({
+        where: {
+          groupId: group.id,
+          userId: user.id,
+        },
+        defaults: {
+          createdById: user.id,
+        },
+      });
+      return group;
+    })
+  );
+  // Remove user from groups they are no longer a member of
+  await GroupUser.destroy({
+    where: {
+      userId: user.id,
+      groupId: {
+        [Op.notIn]: groups.map((group) => group.id),
+      },
+    },
+  });
+}

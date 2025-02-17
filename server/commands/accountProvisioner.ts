@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readFile } from "fs-extra";
 import invariant from "invariant";
+import { Op } from "sequelize";
 import { errToString, errToId } from "@shared/utils/error";
 import { CollectionPermission, UserRole } from "@shared/types";
 import env from "@server/env";
@@ -15,6 +16,8 @@ import {
   Collection,
   Document,
   Event,
+  Group,
+  GroupUser,
   Team,
 } from "@server/models";
 import AuthenticationHelper from "@server/models/helpers/AuthenticationHelper";
@@ -57,6 +60,8 @@ type Props = {
     /** The public url of an image representing the team */
     avatarUrl?: string | null;
   };
+  /** Groups the user should be member of */
+  groups?: string[];
   /** Details of the authentication provider being used */
   authenticationProvider: {
     /** The name of the authentication provider, eg "google" */
@@ -91,6 +96,7 @@ async function accountProvisioner(
   {
     user: userParams,
     team: teamParams,
+    groups: groupNames,
     authenticationProvider: authenticationProviderParams,
     authentication: authenticationParams,
   }: Props
@@ -239,6 +245,11 @@ async function accountProvisioner(
     });
   }
 
+  // Reconcile group memberships from the provider's group claims, if given
+  if (groupNames !== undefined) {
+    await reconciliateUserGroups(groupNames, user, team);
+  }
+
   return {
     user,
     team,
@@ -317,3 +328,47 @@ export async function provisionFirstCollection(
 export default traceFunction({
   spanName: "accountProvisioner",
 })(accountProvisioner);
+
+async function reconciliateUserGroups(
+  groupNames: string[],
+  user: User,
+  team: Team
+) {
+  const groups = await Promise.all(
+    groupNames.map(async (groupName) => {
+      // Get existing group
+      let group = await Group.findOne({
+        where: {
+          name: { [Op.iLike]: groupName },
+          teamId: team.id,
+        },
+      });
+      // Create group if it doesn't exist
+      group ??= await Group.create({
+        name: groupName,
+        teamId: user.teamId,
+        createdById: user.id,
+      });
+      // Add user to group
+      await GroupUser.findOrCreate({
+        where: {
+          groupId: group.id,
+          userId: user.id,
+        },
+        defaults: {
+          createdById: user.id,
+        },
+      });
+      return group;
+    })
+  );
+  // Remove user from groups they are no longer a member of
+  await GroupUser.destroy({
+    where: {
+      userId: user.id,
+      groupId: {
+        [Op.notIn]: groups.map((group) => group.id),
+      },
+    },
+  });
+}

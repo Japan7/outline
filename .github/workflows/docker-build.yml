@@ -10,6 +10,21 @@ on:
         type: string
         required: false
         default: ""
+      registry:
+        description: Registry to publish to, e.g. docker.io or ghcr.io.
+        type: string
+        required: false
+        default: docker.io
+      image-name:
+        description: Image name (without registry) for the application image.
+        type: string
+        required: false
+        default: outlinewiki/outline
+      base-image-name:
+        description: Image name (without registry) for the base image.
+        type: string
+        required: false
+        default: outlinewiki/outline-base
       tags:
         description: docker/metadata-action tag rules.
         type: string
@@ -26,8 +41,8 @@ on:
         default: dockerhub
 
 env:
-  IMAGE_NAME: outlinewiki/outline
-  BASE_IMAGE_NAME: outlinewiki/outline-base
+  IMAGE: ${{ inputs.registry }}/${{ inputs.image-name }}
+  BASE_IMAGE: ${{ inputs.registry }}/${{ inputs.base-image-name }}
 
 jobs:
   build:
@@ -36,9 +51,9 @@ jobs:
       matrix:
         include:
           - platform: linux/amd64
-            runner: blacksmith-8vcpu-ubuntu-2404
+            runner: ubuntu-24.04
           - platform: linux/arm64
-            runner: blacksmith-8vcpu-ubuntu-2404-arm
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Prepare
@@ -51,32 +66,41 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@ab5c1da94f53f5cd75c1038092aa276dddfccbba  # v1
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
       - name: Docker base meta
         id: base_meta
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.BASE_IMAGE_NAME }}
+            ${{ env.BASE_IMAGE }}
           flavor: ${{ inputs.flavor }}
           tags: ${{ inputs.tags }}
 
       - name: Login to Docker Hub
+        if: inputs.registry != 'ghcr.io'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        if: inputs.registry == 'ghcr.io'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push base image
         id: base_build
-        uses: useblacksmith/build-push-action@fb9e3e6a9299c78462bfadd0d93352c316adc9b8  # v2
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.base
           labels: ${{ steps.base_meta.outputs.labels }}
-          tags: ${{ env.BASE_IMAGE_NAME }}
+          tags: ${{ env.BASE_IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           platforms: ${{ matrix.platform }}
           pull: false
@@ -86,23 +110,23 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: |
-            ${{ env.IMAGE_NAME }}
+            ${{ env.IMAGE }}
           flavor: ${{ inputs.flavor }}
           tags: ${{ inputs.tags }}
 
       - name: Build and push
         id: build
-        uses: useblacksmith/build-push-action@fb9e3e6a9299c78462bfadd0d93352c316adc9b8  # v2
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ env.IMAGE_NAME }}
+          tags: ${{ env.IMAGE }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           platforms: ${{ matrix.platform }}
           pull: false
           build-args: |
-            BASE_IMAGE=${{ env.BASE_IMAGE_NAME }}@${{ steps.base_build.outputs.digest }}
+            BASE_IMAGE=${{ env.BASE_IMAGE }}@${{ steps.base_build.outputs.digest }}
 
       - name: Export digest
         run: |
@@ -119,7 +143,7 @@ jobs:
           retention-days: 1
 
   merge:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     needs:
       - build
     environment: ${{ inputs.environment }}
@@ -132,19 +156,25 @@ jobs:
           merge-multiple: true
 
       - name: Login to Docker Hub
+        if: inputs.registry != 'ghcr.io'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Setup Blacksmith Builder
-        uses: useblacksmith/setup-docker-builder@ab5c1da94f53f5cd75c1038092aa276dddfccbba  # v1
+      - name: Login to GitHub Container Registry
+        if: inputs.registry == 'ghcr.io'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE }}
           flavor: ${{ inputs.flavor }}
           tags: ${{ inputs.tags }}
 
@@ -153,8 +183,8 @@ jobs:
         run: |
           # shellcheck disable=SC2046  # word splitting is intentional here
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.IMAGE_NAME }}@sha256:%s ' *)
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}

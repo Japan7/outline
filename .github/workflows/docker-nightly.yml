@@ -12,6 +12,9 @@ jobs:
     secrets: inherit
     with:
       ref: main
+      registry: ghcr.io
+      image-name: japan7/outline
+      base-image-name: japan7/outline-base
       environment: dockerhub-nightly
       flavor: |
         latest=false

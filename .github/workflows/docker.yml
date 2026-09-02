@@ -2,6 +2,9 @@ name: Publish build
 
 on:
   push:
+    branches:
+      - "main"
+      - "oidc-groups"
     tags:
       - "v*"
   workflow_dispatch:
@@ -11,6 +14,9 @@ jobs:
     uses: ./.github/workflows/docker-build.yml
     secrets: inherit
     with:
+      registry: ghcr.io
+      image-name: japan7/outline
+      base-image-name: japan7/outline-base
       tags: |
         type=ref,event=branch
         type=semver,pattern={{version}}
